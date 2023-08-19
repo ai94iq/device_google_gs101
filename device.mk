@@ -17,11 +17,6 @@
 include device/google/gs-common/device.mk
 
 TARGET_BOARD_PLATFORM := gs101
-DEVICE_IS_64BIT_ONLY ?= $(if $(filter %_64,$(TARGET_PRODUCT)),true,false)
-
-ifeq ($(DEVICE_IS_64BIT_ONLY),true)
-LOCAL_64ONLY := _64
-endif
 
 AB_OTA_POSTINSTALL_CONFIG += \
 	RUN_POSTINSTALL_system=true \
@@ -935,11 +930,8 @@ ifneq ($(BOARD_WITHOUT_RADIO),true)
 $(call inherit-product-if-exists, vendor/samsung_slsi/telephony/$(BOARD_USES_SHARED_VENDOR_TELEPHONY)/common/device-vendor.mk)
 endif
 
-ifeq ($(DEVICE_IS_64BIT_ONLY),true)
-$(call inherit-product, $(SRC_TARGET_DIR)/product/core_64_bit_only.mk)
-else
+PRODUCT_VENDOR_PROPERTIES += dalvik.vm.dex2oat64.enabled=true
 $(call inherit-product, $(SRC_TARGET_DIR)/product/core_64_bit.mk)
-endif
 #$(call inherit-product, hardware/google_devices/exynos5/exynos5.mk)
 #$(call inherit-product-if-exists, hardware/google_devices/gs101/gs101.mk)
 #$(call inherit-product-if-exists, vendor/google_devices/common/exynos-vendor.mk)
