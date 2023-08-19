@@ -24,7 +24,7 @@ PRODUCT_PACKAGES += \
     EuiccSupportPixelOverlay
 
 # Lineage Health
-include hardware/google/pixel/lmodroid_health/device.mk
+include hardware/google/pixel/lineage_health/device.mk
 
 # Parts
 PRODUCT_PACKAGES += \
