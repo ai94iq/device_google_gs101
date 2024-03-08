@@ -15,8 +15,32 @@
 #
 
 include device/google/gs-common/device.mk
+include device/google/gs-common/gs_watchdogd/watchdog.mk
+include device/google/gs-common/ramdump/ramdump.mk
+include device/google/gs-common/soc/soc.mk
+include device/google/gs-common/soc/freq.mk
+include device/google/gs-common/modem/modem.mk
+include device/google/gs-common/aoc/aoc.mk
+include device/google/gs-common/thermal/thermal.mk
+include device/google/gs-common/pixel_metrics/pixel_metrics.mk
+include device/google/gs-common/performance/perf.mk
+include device/google/gs-common/display/dump.mk
+include device/google/gs101/dumpstate/item.mk
+include device/google/gs-common/radio/dump.mk
+include device/google/gs-common/gear/dumpstate/aidl.mk
+include device/google/gs-common/camera/dump.mk
+include device/google/gs-common/gps/dump/log.mk
+include device/google/gs-common/widevine/widevine.mk
+include device/google/gs-common/sota_app/factoryota.mk
+include device/google/gs-common/misc_writer/misc_writer.mk
+include device/google/gs-common/gyotaku_app/gyotaku.mk
 
 TARGET_BOARD_PLATFORM := gs101
+DEVICE_IS_64BIT_ONLY ?= $(if $(filter %_64,$(TARGET_PRODUCT)),true,false)
+
+ifeq ($(DEVICE_IS_64BIT_ONLY),true)
+LOCAL_64ONLY := _64
+endif
 
 AB_OTA_POSTINSTALL_CONFIG += \
 	RUN_POSTINSTALL_system=true \
@@ -25,35 +49,30 @@ AB_OTA_POSTINSTALL_CONFIG += \
 POSTINSTALL_OPTIONAL_system=true
 
 # Set Vendor SPL to match platform
-VENDOR_SECURITY_PATCH = 2023-10-05
+VENDOR_SECURITY_PATCH = $(PLATFORM_SECURITY_PATCH)
 
 # Set boot SPL
-BOOT_SECURITY_PATCH = 2023-10-05
-
-# TODO(b/207450311): Remove this flag once implemented
-USE_PIXEL_GRALLOC := false
-ifeq ($(USE_PIXEL_GRALLOC),true)
-	PRODUCT_SOONG_NAMESPACES += hardware/google/gchips/GrallocHAL
-else
-	PRODUCT_SOONG_NAMESPACES += hardware/google/gchips/gralloc4
-endif
+BOOT_SECURITY_PATCH = $(PLATFORM_SECURITY_PATCH)
 
 PRODUCT_SOONG_NAMESPACES += \
 	hardware/google/av \
 	hardware/google/gchips \
 	hardware/google/graphics/common \
+	hardware/google/gchips/gralloc4 \
 	hardware/google/graphics/gs101 \
 	hardware/google/interfaces \
 	hardware/google/pixel \
 	device/google/gs101 \
 	device/google/gs101/powerstats \
+	system/chre/host/hal_generic \
 	vendor/google/whitechapel/tools \
-	vendor/broadcom/bluetooth \
 	vendor/google/camera \
 	vendor/google/interfaces \
 	vendor/google_devices/common/proprietary/confirmatioui_hal \
 	vendor/google_nos/host/android \
 	vendor/google_nos/test/system-test-harness
+
+LOCAL_KERNEL := $(TARGET_KERNEL_DIR)/Image.lz4
 
 # OEM Unlock reporting
 PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
@@ -99,8 +118,8 @@ endif
 # From system.property
 PRODUCT_PROPERTY_OVERRIDES += \
 	ro.telephony.default_network=27 \
-	persist.vendor.ril.use.iccid_to_plmn=1 \
-	persist.vendor.ril.emergencynumber.mode=5
+	persist.vendor.ril.db_ecc.use.iccid_to_plmn=1 \
+	persist.vendor.ril.db_ecc.id.type=5
 	#rild.libpath=/system/lib64/libsec-ril.so \
 	#rild.libargs=-d /dev/umts_ipc0
 
@@ -162,13 +181,10 @@ USES_LASSEN_MODEM := true
 ifeq ($(USES_GOOGLE_DIALER_CARRIER_SETTINGS),true)
 USE_GOOGLE_DIALER := true
 USE_GOOGLE_CARRIER_SETTINGS := true
-USES_GAUDIO := true
 endif
 
-ifeq (,$(filter aosp_%,$(TARGET_PRODUCT)))
 # Audio client implementation for RIL
 USES_GAUDIO := true
-endif
 
 # ######################
 # GRAPHICS - GPU (begin)
@@ -184,8 +200,6 @@ PRODUCT_SOONG_NAMESPACES += \
 
 $(call soong_config_set,pixel_mali,soc,$(TARGET_BOARD_PLATFORM))
 
-include device/google/gs101/neuralnetwork/neuralnetwork.mk
-
 PRODUCT_PACKAGES += \
 	libGLES_mali \
 	vulkan.mali \
@@ -197,6 +211,14 @@ PRODUCT_VENDOR_PROPERTIES += \
 
 PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
 	debug.mali.disable_backend_affinity=true
+
+# Mali Configuration Properties
+PRODUCT_VENDOR_PROPERTIES += \
+	vendor.mali.platform.config=/vendor/etc/mali/platform.config \
+	vendor.mali.debug.config=/vendor/etc/mali/debug.config \
+	vendor.mali.base_protected_max_core_count=3 \
+	vendor.mali.base_protected_tls_max=67108864 \
+	vendor.mali.platform_agt_frequency_khz=24576
 
 ifeq ($(USE_SWIFTSHADER),true)
 PRODUCT_PACKAGES += \
@@ -210,8 +232,8 @@ PRODUCT_COPY_FILES += \
 	frameworks/native/data/etc/android.hardware.vulkan.version-1_3.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.vulkan.version.xml \
 	frameworks/native/data/etc/android.hardware.vulkan.level-1.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.vulkan.level.xml \
 	frameworks/native/data/etc/android.hardware.vulkan.compute-0.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.vulkan.compute.xml \
-	frameworks/native/data/etc/android.software.vulkan.deqp.level-2022-03-01.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.software.vulkan.deqp.level.xml \
-	frameworks/native/data/etc/android.software.opengles.deqp.level-2022-03-01.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.software.opengles.deqp.level.xml
+	frameworks/native/data/etc/android.software.vulkan.deqp.level-2023-03-01.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.software.vulkan.deqp.level.xml \
+	frameworks/native/data/etc/android.software.opengles.deqp.level-2023-03-01.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.software.opengles.deqp.level.xml
 
 ifeq ($(USE_SWIFTSHADER),true)
 PRODUCT_VENDOR_PROPERTIES += \
@@ -220,6 +242,11 @@ else
 PRODUCT_VENDOR_PROPERTIES += \
 	ro.hardware.egl = mali
 endif
+
+# Configure EGL blobcache
+PRODUCT_VENDOR_PROPERTIES += \
+       ro.egl.blobcache.multifile=true \
+       ro.egl.blobcache.multifile_limit=33554432 \
 
 PRODUCT_VENDOR_PROPERTIES += \
 	ro.opengles.version=196610 \
@@ -259,6 +286,7 @@ PRODUCT_ENFORCE_PRODUCT_PARTITION_INTERFACE := true
 
 # Init files
 PRODUCT_COPY_FILES += \
+	$(LOCAL_KERNEL):kernel \
 	device/google/gs101/conf/init.gs101.usb.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/hw/init.gs101.usb.rc \
 	device/google/gs101/conf/ueventd.gs101.rc:$(TARGET_COPY_OUT_VENDOR)/etc/ueventd.rc
 
@@ -269,9 +297,6 @@ ifneq (,$(filter eng, $(TARGET_BUILD_VARIANT)))
 PRODUCT_COPY_FILES += \
 	device/google/gs101/conf/init.debug.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.debug.rc
 endif
-
-PRODUCT_COPY_FILES += \
-	device/google/gs101/conf/init.aoc.daemon.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/hw/init.aoc.rc
 
 # Recovery files
 PRODUCT_COPY_FILES += \
@@ -294,12 +319,10 @@ PRODUCT_COPY_FILES += \
 
 # Shell scripts
 PRODUCT_COPY_FILES += \
-	device/google/gs101/init.insmod.sh:$(TARGET_COPY_OUT_VENDOR)/bin/init.insmod.sh \
+        device/google/gs101/init.display.sh:$(TARGET_COPY_OUT_VENDOR)/bin/init.display.sh \
 	device/google/gs101/disable_contaminant_detection.sh:$(TARGET_COPY_OUT_VENDOR)/bin/hw/disable_contaminant_detection.sh
 
-# insmod files
-PRODUCT_COPY_FILES += \
-	device/google/gs101/init.insmod.gs101.cfg:$(TARGET_COPY_OUT_VENDOR)/etc/init.insmod.gs101.cfg
+include device/google/gs-common/insmod/insmod.mk
 
 # For creating dtbo image
 PRODUCT_HOST_PACKAGES += \
@@ -404,8 +427,8 @@ PRODUCT_COPY_FILES += \
 	frameworks/native/data/etc/android.hardware.sensor.stepdetector.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.stepdetector.xml
 endif
 
-# Add sensor HAL 2.1 product packages
-PRODUCT_PACKAGES += android.hardware.sensors@2.1-service.multihal
+# Add sensor HAL AIDL product packages
+PRODUCT_PACKAGES += android.hardware.sensors-service.multihal
 
 # USB HAL
 PRODUCT_PACKAGES += \
@@ -439,23 +462,6 @@ include hardware/google/pixel/rebalance_interrupts/rebalance_interrupts.mk
 # PowerStats HAL
 PRODUCT_PACKAGES += \
 	android.hardware.power.stats-service.pixel
-
-# dumpstate HAL
-PRODUCT_PACKAGES += \
-	android.hardware.dumpstate@1.1-service.gs101
-
-# AoC support
-PRODUCT_PACKAGES += \
-	aocd
-
-# AoC debug support
-ifneq (,$(filter eng, $(TARGET_BUILD_VARIANT)))
-PRODUCT_PACKAGES_DEBUG += \
-	aocdump \
-	aocutil \
-	aoc_audio_cfg \
-	vp_util
-endif
 
 #
 # Audio HALs
@@ -515,34 +521,12 @@ PRODUCT_PACKAGES += \
 
 # WideVine modules
 PRODUCT_PACKAGES += \
-	android.hardware.drm-service.clearkey \
-	android.hardware.drm-service.widevine \
-	liboemcrypto \
+	liboemcrypto
 
-
-
-$(call soong_config_set,google3a_config,soc,gs101)
-$(call soong_config_set,google3a_config,gcam_awb,true)
-$(call soong_config_set,google3a_config,ghawb_truetone,true)
-
-# Determine if Lyric is in the tree, and only have GCH build against it
-# if it is. Cases when Lyric isn't going to be in the tree:
-#    - Non-pixel gs101 devices that exclude vendor/google/services/LyricCameraHAL/src (none as of now)
-#    - master-without-vendor and other types of AOSP builds (those won't built GCH either, but need this to actually start building)
-#
-# Builds that will have it are
-#    - Regular gs101 builds
-#    - PDK gs101 builds because they still have vendor/google/services/LyricCameraHAL/src
-
-ifneq ($(wildcard vendor/google/services/LyricCameraHAL/src),)
+# Lyric Camera HAL settings
+include device/google/gs-common/camera/lyric.mk
 $(call soong_config_set,lyric,soc,gs101)
-$(call soong_config_set,lyric,use_lyric_camera_hal,true)
-# lyric::tuning_product is set in device-specific makefiles,
-# such as device/google/raviole/device-oriole.mk
-
-# Camera HAL library selection
-$(call soong_config_set,gch,hwl_library,lyric)
-endif
+$(call soong_config_set,google3a_config,soc,gs101)
 
 # WiFi
 PRODUCT_PACKAGES += \
@@ -556,13 +540,14 @@ PRODUCT_PACKAGES += \
 
 ifneq (,$(filter eng, $(TARGET_BUILD_VARIANT)))
 PRODUCT_PACKAGES_DEBUG += \
-	sg_write_buffer \
 	f2fs_io \
 	check_f2fs \
-	f2fsstat \
 	f2fs.fibmap \
 	dump.f2fs
 endif
+
+# Storage dump
+include device/google/gs-common/storage/storage.mk
 
 # Storage health HAL
 PRODUCT_PACKAGES += \
@@ -575,12 +560,19 @@ PRODUCT_PACKAGES += \
 $(call inherit-product, $(SRC_TARGET_DIR)/product/emulated_storage.mk)
 
 $(call inherit-product, $(SRC_TARGET_DIR)/product/virtual_ab_ota/launch_with_vendor_ramdisk.mk)
+
+# Enable usage of io_uring in fastbootd
+PRODUCT_VENDOR_PROPERTIES += sys.usb.ffs.io_uring_enabled=true
+
 # Enforce generic ramdisk allow list
 $(call inherit-product, $(SRC_TARGET_DIR)/product/generic_ramdisk.mk)
 
 # Titan-M
 ifeq (,$(filter true, $(BOARD_WITHOUT_DTLS)))
-include hardware/google/pixel/dauntless/dauntless.mk
+include device/google/gs-common/dauntless/gsc.mk
+else
+# include dauntless sepolicy to avoid compile error on devices without dauntless
+BOARD_VENDOR_SEPOLICY_DIRS += device/google/gs-common/dauntless/sepolicy
 endif
 
 # Copy Camera HFD Setfiles
@@ -612,13 +604,7 @@ PRODUCT_COPY_FILES += \
 	frameworks/native/data/etc/android.hardware.camera.front.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.camera.front.xml \
 	frameworks/native/data/etc/android.hardware.camera.concurrent.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.camera.concurrent.xml \
 	frameworks/native/data/etc/android.hardware.camera.full.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.camera.full.xml\
-	frameworks/native/data/etc/android.hardware.camera.raw.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.camera.raw.xml
-
-ifneq ($(wildcard vendor/google/services/LyricCameraHAL/src),)
-PRODUCT_COPY_FILES += \
-	vendor/google/services/LyricCameraHAL/src/vendor.android.hardware.camera.preview-dis.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/vendor.android.hardware.camera.preview-dis.xml\
-	vendor/google/services/LyricCameraHAL/src/vendor.android.hardware.camera.stream-usecase.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/vendor.android.hardware.camera.stream-usecase.xml
-endif
+	frameworks/native/data/etc/android.hardware.camera.raw.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.camera.raw.xml\
 
 #PRODUCT_COPY_FILES += \
 	frameworks/native/data/etc/handheld_core_hardware.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/handheld_core_hardware.xml \
@@ -640,6 +626,7 @@ PRODUCT_PROPERTY_OVERRIDES += \
 	debug.hwc.winupdate=1
 
 # hw composer HAL
+$(call soong_config_set,google_displaycolor,displaycolor_platform,gs101)
 PRODUCT_PACKAGES += \
 	libdisplaycolor \
 	hwcomposer.$(TARGET_BOARD_PLATFORM)
@@ -798,14 +785,27 @@ PRODUCT_PACKAGES += \
 	libopenvx-opencl
 endif
 
-# GPS HAL
+# Location
 ifeq (,$(filter tangor citron,$(subst _, ,$(TARGET_PRODUCT))))
-include device/google/gs101/gnss/device-gnss.mk
+include device/google/gs-common/gps/brcm/device.mk
+PRODUCT_COPY_FILES += \
+	device/google/gs101/location/gps.cer:$(TARGET_COPY_OUT_VENDOR)/etc/gnss/gps.cer
+ifneq (,$(filter eng, $(TARGET_BUILD_VARIANT)))
+        PRODUCT_COPY_FILES += \
+                device/google/gs101/location/lhd.conf:$(TARGET_COPY_OUT_VENDOR)/etc/gnss/lhd.conf \
+                device/google/gs101/location/scd.conf:$(TARGET_COPY_OUT_VENDOR)/etc/gnss/scd.conf
+else
+        PRODUCT_COPY_FILES += \
+                device/google/gs101/location/lhd_user.conf:$(TARGET_COPY_OUT_VENDOR)/etc/gnss/lhd.conf \
+                device/google/gs101/location/scd_user.conf:$(TARGET_COPY_OUT_VENDOR)/etc/gnss/scd.conf
 endif
-
+endif
 # Trusty (KM, GK, Storage)
 $(call inherit-product, system/core/trusty/trusty-storage.mk)
 $(call inherit-product, system/core/trusty/trusty-base.mk)
+
+# Trusty dump
+include device/google/gs-common/trusty/trusty.mk
 
 # Trusty unit test tool
 ifneq (,$(filter eng, $(TARGET_BUILD_VARIANT)))
@@ -823,11 +823,6 @@ PRODUCT_PACKAGES += \
 # Storage: for factory reset protection feature
 PRODUCT_PROPERTY_OVERRIDES += \
 	ro.frp.pst=/dev/block/by-name/frp
-
-# Bluetooth
-PRODUCT_COPY_FILES += \
-	frameworks/native/data/etc/android.hardware.bluetooth.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.bluetooth.xml \
-	frameworks/native/data/etc/android.hardware.bluetooth_le.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.bluetooth_le.xml
 
 # System props to enable Bluetooth Quality Report (BQR) feature
 ifneq (,$(filter eng, $(TARGET_BUILD_VARIANT)))
@@ -856,7 +851,7 @@ PRODUCT_PRODUCT_PROPERTIES += \
 
 # Use FUSE BPF
 PRODUCT_PRODUCT_PROPERTIES += \
-	ro.fuse.bpf.enabled=false
+	ro.fuse.bpf.enabled=true
 
 # Use /product/etc/fstab.postinstall to mount system_other
 PRODUCT_PRODUCT_PROPERTIES += \
@@ -903,6 +898,7 @@ $(call inherit-product-if-exists, vendor/samsung_slsi/telephony/$(BOARD_USES_SHA
 #RCS Test Messaging App
 ifneq (,$(filter eng, $(TARGET_BUILD_VARIANT)))
 PRODUCT_PACKAGES_DEBUG += \
+	preinstalled-packages-product-gs101-device-debug.xml \
 	TestRcsApp
 endif
 
@@ -922,6 +918,8 @@ SUPPORT_MULTI_SIM := true
 SUPPORT_NR := true
 # Using IRadio 1.6
 USE_RADIO_HAL_1_6 := true
+# Support SecureElement HAL for HIDL
+USE_SE_HIDL := true
 
 #$(call inherit-product, vendor/google_devices/telephony/common/device-vendor.mk)
 #$(call inherit-product, vendor/google_devices/gs101/proprietary/device-vendor.mk)
@@ -930,19 +928,17 @@ ifneq ($(BOARD_WITHOUT_RADIO),true)
 $(call inherit-product-if-exists, vendor/samsung_slsi/telephony/$(BOARD_USES_SHARED_VENDOR_TELEPHONY)/common/device-vendor.mk)
 endif
 
-PRODUCT_VENDOR_PROPERTIES += dalvik.vm.dex2oat64.enabled=true
+ifeq ($(DEVICE_IS_64BIT_ONLY),true)
+$(call inherit-product, $(SRC_TARGET_DIR)/product/core_64_bit_only.mk)
+else
 $(call inherit-product, $(SRC_TARGET_DIR)/product/core_64_bit.mk)
+endif
 #$(call inherit-product, hardware/google_devices/exynos5/exynos5.mk)
 #$(call inherit-product-if-exists, hardware/google_devices/gs101/gs101.mk)
 #$(call inherit-product-if-exists, vendor/google_devices/common/exynos-vendor.mk)
 #$(call inherit-product-if-exists, hardware/broadcom/wlan/bcmdhd/firmware/bcm4375/device-bcm.mk)
-ifeq ($(wildcard vendor/google/sensors/usf),)
-$(call inherit-product-if-exists, vendor/google_devices/gs101/proprietary/usf/usf_product.mk)
-else
-$(call inherit-product-if-exists, vendor/google/sensors/usf/android/usf_efw_product.mk)
-endif
-$(call inherit-product-if-exists, vendor/google/services/LyricCameraHAL/src/build/device-vendor.mk)
-$(call inherit-product-if-exists, vendor/google/camera/devices/whi/device-vendor.mk)
+include device/google/gs-common/sensors/sensors.mk
+$(call soong_config_set,usf,target_soc,gs101)
 
 PRODUCT_COPY_FILES += \
 	device/google/gs101/default-permissions.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/default-permissions/default-permissions.xml \
@@ -996,61 +992,7 @@ PRODUCT_PACKAGES += \
 
 # Audio
 # Audio HAL Server & Default Implementations
-PRODUCT_PACKAGES += \
-	android.hardware.audio.service \
-	android.hardware.audio@7.1-impl \
-	android.hardware.audio.effect@7.0-impl \
-	android.hardware.bluetooth.audio-impl \
-	android.hardware.soundtrigger@2.3-impl \
-	vendor.google.whitechapel.audio.audioext@4.0-impl
-
-#Audio HAL libraries
-PRODUCT_PACKAGES += \
-	audio.primary.$(TARGET_BOARD_PLATFORM) \
-	audio.platform.aoc \
-	sound_trigger.primary.$(TARGET_BOARD_PLATFORM) \
-	audio_bt_aoc \
-	audio_tunnel_aoc \
-	aoc_aud_ext \
-	libaoctuningdecoder \
-	libaoc_waves \
-	liboffloadeffect \
-	audio_waves_aoc \
-	audio_fortemedia_aoc \
-	audio_bluenote_aoc \
-	audio_usb_aoc \
-	audio_spk_35l41 \
-	audio.usb.default \
-	audio.usbv2.default \
-	audio.bluetooth.default \
-	audio.r_submix.default \
-	libamcsextfile \
-	audio_amcs_ext \
-
-
-#Audio Vendor libraries
-PRODUCT_PACKAGES += \
-	libfvsam_prm_parser \
-	libmahalcontroller \
-	libAlgFx_HiFi3z
-
-# AudioHAL Configurations
-PRODUCT_COPY_FILES += \
-	frameworks/av/services/audiopolicy/config/a2dp_audio_policy_configuration_7_0.xml:$(TARGET_COPY_OUT_VENDOR)/etc/a2dp_audio_policy_configuration_7_0.xml \
-	frameworks/av/services/audiopolicy/config/a2dp_in_audio_policy_configuration_7_0.xml:$(TARGET_COPY_OUT_VENDOR)/etc/a2dp_in_audio_policy_configuration_7_0.xml \
-	frameworks/av/services/audiopolicy/config/bluetooth_audio_policy_configuration_7_0.xml:$(TARGET_COPY_OUT_VENDOR)/etc/bluetooth_audio_policy_configuration_7_0.xml \
-	frameworks/av/services/audiopolicy/config/hearing_aid_audio_policy_configuration_7_0.xml:$(TARGET_COPY_OUT_VENDOR)/etc/hearing_aid_audio_policy_configuration_7_0.xml \
-	frameworks/av/services/audiopolicy/config/r_submix_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/r_submix_audio_policy_configuration.xml \
-	frameworks/av/services/audiopolicy/config/usb_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/usb_audio_policy_configuration.xml \
-	frameworks/av/services/audiopolicy/config/audio_policy_volumes.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_policy_volumes.xml \
-	frameworks/av/services/audiopolicy/config/default_volume_tables.xml:$(TARGET_COPY_OUT_VENDOR)/etc/default_volume_tables.xml \
-
-#Audio soong
-PRODUCT_SOONG_NAMESPACES += \
-	vendor/google/whitechapel/audio/hal \
-	vendor/google/whitechapel/audio/interfaces
-
-$(call soong_config_set,aoc_audio_board,platform,$(TARGET_BOARD_PLATFORM))
+include device/google/gs-common/audio/hidl_gs101.mk
 
 ## AoC soong
 PRODUCT_SOONG_NAMESPACES += \
@@ -1071,12 +1013,6 @@ PRODUCT_PROPERTY_OVERRIDES += \
 # declare use of spatial audio
 # PRODUCT_PROPERTY_OVERRIDES += \
 #	ro.audio.spatializer_enabled=true
-
-ifeq (,$(filter aosp_%,$(TARGET_PRODUCT)))
-# IAudioMetricExt HIDL
-PRODUCT_PACKAGES += \
-    vendor.google.audiometricext@1.0-service-vendor
-endif
 
 # vndservicemanager and vndservice no longer included in API 30+, however needed by vendor code.
 # See b/148807371 for reference
@@ -1112,7 +1048,12 @@ PRODUCT_PACKAGES += \
 include hardware/google/pixel/thermal/device.mk
 PRODUCT_PROPERTY_OVERRIDES += persist.vendor.enable.thermal.genl=true
 
-include device/google/gs101/edgetpu/edgetpu.mk
+# EdgeTPU
+include device/google/gs-common/edgetpu/edgetpu.mk
+# Config variables for TPU chip on device.
+$(call soong_config_set,edgetpu_config,chip,abrolhos)
+# TPU firmware
+PRODUCT_PACKAGES += edgetpu-abrolhos.fw
 
 # Connectivity Thermal Power Manager
 PRODUCT_PACKAGES += \
@@ -1178,7 +1119,7 @@ endif
 # Install product specific framework compatibility matrix
 # (TODO: b/169535506) This includes the FCM for system_ext and product partition.
 # It must be split into the FCM of each partition.
-DEVICE_PRODUCT_COMPATIBILITY_MATRIX_FILE := device/google/gs101/device_framework_matrix_product.xml
+DEVICE_PRODUCT_COMPATIBILITY_MATRIX_FILE += device/google/gs101/device_framework_matrix_product.xml
 
 # Preopt SystemUI
 PRODUCT_DEXPREOPT_SPEED_APPS += SystemUIGoogle  # For internal
@@ -1199,3 +1140,10 @@ PRODUCT_PROPERTY_OVERRIDES += \
 
 # Call deleteAllKeys if vold detects a factory reset
 PRODUCT_VENDOR_PROPERTIES += ro.crypto.metadata_init_delete_all_keys.enabled=true
+
+# Increase lmkd aggressiveness
+PRODUCT_PROPERTY_OVERRIDES += \
+    ro.lmk.swap_free_low_percentage=100
+
+# Hardware Info Collection
+include hardware/google/pixel/HardwareInfo/HardwareInfo.mk

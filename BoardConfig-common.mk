@@ -32,12 +32,16 @@ TARGET_CPU_ABI := arm64-v8a
 TARGET_CPU_VARIANT := cortex-a55
 TARGET_CPU_VARIANT_RUNTIME := cortex-a55
 
+DEVICE_IS_64BIT_ONLY ?= $(if $(filter %_64,$(TARGET_PRODUCT)),true,false)
+
+ifneq ($(DEVICE_IS_64BIT_ONLY),true)
 TARGET_2ND_ARCH := arm
 TARGET_2ND_ARCH_VARIANT := armv8-a
 TARGET_2ND_CPU_ABI := armeabi-v7a
 TARGET_2ND_CPU_ABI2 := armeabi
 TARGET_2ND_CPU_VARIANT := generic
 TARGET_2ND_CPU_VARIANT_RUNTIME := cortex-a53
+endif
 
 BOARD_KERNEL_CMDLINE += dyndbg=\"func alloc_contig_dump_pages +p\"
 BOARD_KERNEL_CMDLINE += earlycon=exynos4210,0x10A00000 console=ttySAC0,115200 androidboot.console=ttySAC0 printk.devkmsg=on
@@ -47,7 +51,12 @@ BOARD_BOOTCONFIG += androidboot.boot_devices=14700000.ufs
 
 TARGET_NO_BOOTLOADER := true
 TARGET_NO_RADIOIMAGE := true
+BOARD_PREBUILT_BOOTIMAGE := $(wildcard $(TARGET_KERNEL_DIR)/boot.img)
+ifneq (,$(BOARD_PREBUILT_BOOTIMAGE))
+TARGET_NO_KERNEL := true
+else
 TARGET_NO_KERNEL := false
+endif
 BOARD_USES_GENERIC_KERNEL_IMAGE := true
 BOARD_MOVE_RECOVERY_RESOURCES_TO_VENDOR_BOOT := true
 BOARD_MOVE_GSI_AVB_KEYS_TO_VENDOR_BOOT := true
@@ -127,6 +136,10 @@ BOARD_AVB_VBMETA_SYSTEM_ALGORITHM := SHA256_RSA2048
 BOARD_AVB_VBMETA_SYSTEM_ROLLBACK_INDEX := $(PLATFORM_SECURITY_PATCH_TIMESTAMP)
 BOARD_AVB_VBMETA_SYSTEM_ROLLBACK_INDEX_LOCATION := 1
 
+ifneq ($(PRODUCT_BUILD_PVMFW_IMAGE),false)
+BOARD_AVB_VBMETA_SYSTEM += pvmfw
+endif
+
 # Enable chained vbmeta for boot images
 BOARD_AVB_BOOT_KEY_PATH := external/avb/test/data/testkey_rsa2048.pem
 BOARD_AVB_BOOT_ALGORITHM := SHA256_RSA2048
@@ -159,6 +172,7 @@ BOARD_USE_ENC_SW_CSC := true
 BOARD_SUPPORT_MFC_ENC_RGB := true
 BOARD_USE_BLOB_ALLOCATOR := false
 BOARD_SUPPORT_MFC_ENC_BT2020 := true
+BOARD_SUPPORT_FLEXIBLE_P010 := true
 
 ########################
 
@@ -210,12 +224,15 @@ $(call soong_config_set,haptics,actuator_model,$(ACTUATOR_MODEL))
 # SoundTriggerHAL Configuration
 #BOARD_USE_SOUNDTRIGGER_HAL := false
 
+# Vibrator HAL actuator model and adaptive haptics configuration
+$(call soong_config_set,haptics,actuator_model,$(ACTUATOR_MODEL))
+$(call soong_config_set,haptics,adaptive_haptics_feature,$(ADAPTIVE_HAPTICS_FEATURE))
+
 # HWComposer
 BOARD_HWC_VERSION := libhwc2.1
 TARGET_RUNNING_WITHOUT_SYNC_FRAMEWORK := false
 BOARD_HDMI_INCAPABLE := true
 TARGET_USES_HWC2 := true
-HWC_SKIP_VALIDATE := true
 HWC_SUPPORT_RENDER_INTENT := true
 HWC_SUPPORT_COLOR_TRANSFORM := true
 #BOARD_USES_DISPLAYPORT := true
@@ -249,6 +266,8 @@ BOARD_USES_SCALER_M2M1SHOT := true
 # Device Tree
 BOARD_USES_DT := true
 BOARD_INCLUDE_DTB_IN_BOOTIMG := true
+BOARD_PREBUILT_DTBIMAGE_DIR := $(TARGET_KERNEL_DIR)
+BOARD_PREBUILT_DTBOIMAGE := $(BOARD_PREBUILT_DTBIMAGE_DIR)/dtbo.img
 
 # PLATFORM LOG
 TARGET_USES_LOGD := true
@@ -274,6 +293,9 @@ BOARD_SECCOMP_POLICY = device/google/gs101/seccomp_policy
 
 #CURL
 BOARD_USES_CURL := true
+
+# Sensor HAL
+BOARD_USES_EXYNOS_SENSORS_DUMMY := true
 
 # VISION
 # Exynos vision framework (EVF)
@@ -302,16 +324,6 @@ BOARD_VNDK_VERSION := current
 # H/W align restriction of MM IPs
 BOARD_EXYNOS_S10B_FORMAT_ALIGN := 64
 
-# NeuralNetworks
-GPU_SOURCE_PRESENT := $(wildcard vendor/arm/mali/valhall)
-GPU_PREBUILD_PRESENT := $(wildcard vendor/google/$(TARGET_DEVICE)/proprietary)
-ifneq (,$(strip $(GPU_SOURCE_PRESENT) $(GPU_PREBUILD_PRESENT)))
-ARMNN_COMPUTE_CL_ENABLE := 1
-else
-ARMNN_COMPUTE_CL_ENABLE := 0
-endif
-ARMNN_COMPUTE_NEON_ENABLE := 1
-
 # Boot.img
 BOARD_RAMDISK_USE_LZ4     := true
 #BOARD_KERNEL_BASE        := 0x80000000
@@ -330,11 +342,34 @@ BOARD_BOOTIMAGE_PARTITION_SIZE := 0x04000000
 BOARD_VENDOR_BOOTIMAGE_PARTITION_SIZE := 0x04000000
 BOARD_DTBOIMG_PARTITION_SIZE := 0x01000000
 
-# System As Root
-BOARD_BUILD_SYSTEM_ROOT_IMAGE := false
-
 # Vendor ramdisk image for kernel development
 BOARD_BUILD_VENDOR_RAMDISK_IMAGE := true
+
+KERNEL_MODULE_DIR := $(TARGET_KERNEL_DIR)
+KERNEL_MODULES := $(wildcard $(KERNEL_MODULE_DIR)/*.ko)
+
+BOARD_VENDOR_KERNEL_MODULES_BLOCKLIST_FILE := $(KERNEL_MODULE_DIR)/vendor_dlkm.modules.blocklist
+
+# Prebuilt kernel modules that are *not* listed in vendor_boot.modules.load
+BOARD_PREBUILT_VENDOR_RAMDISK_KERNEL_MODULES = fips140/fips140.ko
+BOARD_VENDOR_RAMDISK_KERNEL_MODULES_LOAD_EXTRA = $(foreach k,$(BOARD_PREBUILT_VENDOR_RAMDISK_KERNEL_MODULES),$(if $(wildcard $(KERNEL_MODULE_DIR)/$(k)), $(k)))
+KERNEL_MODULES += $(addprefix $(KERNEL_MODULE_DIR)/, $(BOARD_VENDOR_RAMDISK_KERNEL_MODULES_LOAD_EXTRA))
+
+# Kernel modules that are listed in vendor_boot.modules.load
+BOARD_VENDOR_RAMDISK_KERNEL_MODULES_LOAD_FILE := $(strip $(shell cat $(KERNEL_MODULE_DIR)/vendor_boot.modules.load))
+ifndef BOARD_VENDOR_RAMDISK_KERNEL_MODULES_LOAD_FILE
+$(error vendor_boot.modules.load not found or empty)
+endif
+BOARD_VENDOR_RAMDISK_KERNEL_MODULES_LOAD := $(BOARD_VENDOR_RAMDISK_KERNEL_MODULES_LOAD_EXTRA)
+BOARD_VENDOR_RAMDISK_KERNEL_MODULES_LOAD += $(BOARD_VENDOR_RAMDISK_KERNEL_MODULES_LOAD_FILE)
+BOARD_VENDOR_RAMDISK_KERNEL_MODULES := $(addprefix $(KERNEL_MODULE_DIR)/, $(BOARD_VENDOR_RAMDISK_KERNEL_MODULES_LOAD_EXTRA))
+BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(addprefix $(KERNEL_MODULE_DIR)/, $(notdir $(BOARD_VENDOR_RAMDISK_KERNEL_MODULES_LOAD_FILE)))
+
+BOARD_VENDOR_KERNEL_MODULES_LOAD += $(strip $(shell cat $(KERNEL_MODULE_DIR)/vendor_dlkm.modules.load))
+ifndef BOARD_VENDOR_KERNEL_MODULES_LOAD
+$(error vendor_dlkm.modules.load not found or empty)
+endif
+BOARD_VENDOR_KERNEL_MODULES += $(KERNEL_MODULES)
 
 # Using BUILD_COPY_HEADERS
 BUILD_BROKEN_USES_BUILD_COPY_HEADERS := true
